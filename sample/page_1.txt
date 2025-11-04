@@ -1,0 +1,44 @@
+P T R
+Clerk of the House of Representatives • Legislative Resource Center • B81 Cannon Building • Washington, DC 20515
+F I
+Name: Hon. Marjorie Taylor Greene
+Status: Member
+State/District:GA14
+T
+ID Owner Asset Transaction
+Type
+Date Notification
+Date
+Amount Cap.
+Gains >
+$200?
+Amazon.com, Inc. - Common Stock
+(AMZN) [ST]
+P 10/24/202510/27/2025$1,001 - $15,000
+F S: New
+Amgen Inc. - Common Stock (AMGN)
+[ST]
+P 10/24/202510/27/2025$1,001 - $15,000
+F S: New
+Berkshire Hathaway Inc. New
+Common Stock (BRK.B) [ST]
+P 10/24/202510/27/2025$1,001 - $15,000
+F S: New
+Blackstone Inc. Common Stock (BX)
+[ST]
+P 10/24/202510/27/2025$1,001 - $15,000
+F S: New
+Cardinal Health, Inc. Common Stock
+(CAH) [ST]
+P 10/24/202510/27/2025$1,001 - $15,000
+F S: New
+Chevron Corporation Common Stock
+(CVX) [ST]
+P 10/24/202510/27/2025$1,001 - $15,000
+F S: New
+Home Depot, Inc. (HD) [ST] P 10/24/202510/27/2025$1,001 - $15,000
+F S: New
+iShares Bitcoin Trust ETF - iShares
+Bitcoin Trust ETF (IBIT) [ST]
+P 10/24/202510/27/2025$1,001 - $15,000
+Filing ID #20033360
