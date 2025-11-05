@@ -261,7 +261,7 @@ def parse_report(report_file_path: str) -> list[Transaction]:
 
     return ts
 
-def parse_arguments() -> Optional[Args]:
+def parse_arguments() -> Args:
     parser = argparse.ArgumentParser(
         prog='TODO',
         description='TODO'
@@ -270,7 +270,7 @@ def parse_arguments() -> Optional[Args]:
     args: argparse.Namespace = parser.parse_args()
 
     if not args.filename:
-        return None
+        raise Exception()
     else:
         return Args(
             report_file_path = args.filename
@@ -283,16 +283,9 @@ def parse_arguments() -> Optional[Args]:
 #  |_| |_| |_|\__,_|_|_| |_|
 #                           
 
-def main():
-    a: Optional[Args] = parse_arguments()
-
-    if not a:
-        # TODO
-        return
-
+if __name__ == "__main__":
+    a: Args = parse_arguments()
     ts: list[Transaction] = parse_report(a.report_file_path)
 
     for t in ts:
         print(str(t) + "\n")
-
-main()

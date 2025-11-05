@@ -1,0 +1,12 @@
+services:
+  sqlite:
+    image: keinos/sqlite3:3.44.2
+    # Bind mount with database file accessible for checking into git and
+    # interacting with outside of Docker
+    volumes:
+      - ./report.db:/db/report.db
+    # Idiom to keep container running in spite of the default command
+    # for this container, which kills it immediately
+    command: ["tail", "f", "/dev/null"]
+    # Only restart when commanded to explicitly
+    restart: "no"
