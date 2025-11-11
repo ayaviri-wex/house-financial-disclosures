@@ -14,6 +14,10 @@ from pypdf import PdfReader
 #   \___\___/|_| |_|___/\__\__,_|_| |_|\__|___/
 #                                              
 
+REPORT_PATTERN = re.compile(r"""
+    # 
+""", re.VERBOSE | re.DOTALL)
+
 TRANSACTION_PATTERN = re.compile(r"""
     # Asset group (eg. Amazon (AMZN) [ST])
     \s*(.*?\[.*?\])
@@ -185,6 +189,26 @@ class Transaction:
             self.amount is not None
         )
 
+@dataclass
+class Report:
+    filing_id: int
+    representative_name: str
+    signed_date: date
+    transactions: list[Transaction]
+
+    @staticmethod
+    def from_cleansed_text(raw_text: str, transactions: list[Transaction]):
+        filing_id = 1
+        representative_name = "foo"
+        signed_date = date.today()
+
+        return Report(
+            filing_id=filing_id,
+            representative_name=representative_name,
+            signed_date=signed_date,
+            transactions=transactions
+        )
+
 #   _          _                    __                  _   _                 
 #  | |__   ___| |_ __   ___ _ __   / _|_   _ _ __   ___| |_(_) ___  _ __  ___ 
 #  | '_ \ / _ \ | '_ \ / _ \ '__| | |_| | | | '_ \ / __| __| |/ _ \| '_ \/ __|
@@ -192,11 +216,16 @@ class Transaction:
 #  |_| |_|\___|_| .__/ \___|_|    |_|  \__,_|_| |_|\___|\__|_|\___/|_| |_|___/
 #               |_|                                                           
 
-def extract_raw_text(report_file_path: str) -> list[str]:
+# 1) Extracts the raw text from the PDF at the given path
+# 2) Concatenates the pages together with a space in between each one
+# 3) Cleans the text and returns it
+def extract_cleansed_text(report_file_path: str) -> str:
     reader = PdfReader(report_file_path)
     raw_page_texts: list[str] = [p.extract_text() for p in reader.pages]
+    raw_text: str = " ".join(raw_page_texts)
+    cleansed_text: str = cleanse_raw_text(raw_text)
 
-    return raw_page_texts
+    return cleansed_text
 
 # Given a full report's worth of text
 # 1) Finds matches for the table header
@@ -204,7 +233,7 @@ def extract_raw_text(report_file_path: str) -> list[str]:
 # header match
 # 3) Removes the remaining table header matches alone
 # 4) Removes everything after (and including) the first table footer match
-def remove_document_boilerplate(raw_text: str) -> str:
+def extract_transactions_block(raw_text: str) -> str:
     table_header_matches: list[Match] = list(TABLE_HEADER_PATTERN.finditer(raw_text))
 
     if not table_header_matches:
@@ -227,39 +256,33 @@ def remove_document_boilerplate(raw_text: str) -> str:
 
     return transactions_block
 
-# Given a block of text from the report representing the list of transactions
 # 1) Removes all null byte ASCII representations
 # 2) Replaces contiguous whitespace characters with a single space
-def cleanse_transaction_block(transaction_block: str) -> str:
-    transaction_block = transaction_block.replace('\x00', '')
-    transaction_block = re.sub(r'\s+', ' ', transaction_block)
+def cleanse_raw_text(raw_text: str) -> str:
+    cleansed_text = raw_text.replace('\x00', '')
+    cleansed_text = re.sub(r'\s+', ' ', cleansed_text)
 
-    return transaction_block
-
-# Given a full report's worth of text
-# 1) Removes the document and table headers and footers
-# 2) Removes all null byte ASCII representations
-# 3) Replaces contiguous whitespace characters with a single space
-def extract_transaction_block(raw_text: str) -> str:
-    transaction_block: str = remove_document_boilerplate(raw_text)
-    cleansed_transaction_block: str = cleanse_transaction_block(transaction_block)
-
-    return cleansed_transaction_block
+    return cleansed_text
 
 # 1) Extract the text from the report at the given file path
 # 2) Concatenates the text from each page into a single string
 # 3) Cleans the document and extracts the block of transactions from
 # the document's raw text
 # 4) Finds the transaction matches using a regex pattern
-# 5) Constructs a transaction from each match, returns list
-def parse_report(report_file_path: str) -> list[Transaction]:
-    raw_page_texts: list[str] = extract_raw_text(report_file_path)
-    raw_text: str = " ".join(raw_page_texts)
-    transactions_block: str = extract_transaction_block(raw_text)
+# 5) Constructs a transaction from each match
+# 6) Constructs a report from the raw text and list of transactions, returns report
+def parse_report(report_file_path: str) -> Report:
+    cleansed_text: str = extract_cleansed_text(report_file_path)
+    transactions_block: str = extract_transactions_block(cleansed_text)
     transaction_matches: list[Match] = list(TRANSACTION_PATTERN.finditer(transactions_block))
     ts: list[Transaction] = [Transaction.from_match(m) for m in transaction_matches]
+    # NOTE: I'm adding the Report object after I've created the script to parse 
+    # all transactions, so it's easiest to just construct the report from the raw
+    # text at this point, though I likely would not have done it this way if I had
+    # had the creation of the Report object in mind from the start
+    r: Report = Report.from_cleansed_text(cleansed_text, ts)
 
-    return ts
+    return r
 
 def parse_arguments() -> Args:
     parser = argparse.ArgumentParser(
@@ -285,7 +308,7 @@ def parse_arguments() -> Args:
 
 if __name__ == "__main__":
     a: Args = parse_arguments()
-    ts: list[Transaction] = parse_report(a.report_file_path)
+    r: Report = parse_report(a.report_file_path)
 
-    for t in ts:
+    for t in r.transactions:
         print(str(t) + "\n")

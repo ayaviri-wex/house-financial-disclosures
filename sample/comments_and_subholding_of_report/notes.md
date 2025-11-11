@@ -1,0 +1,1 @@
+- there is also a section for comments for each transaction asset under the subholding of section. the way in which the pattern can distinguish between the start of the asset name in the next transaction and the end of the comment or subholding of section of the previous transaction is unclear

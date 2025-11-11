@@ -1,0 +1,1 @@
+- a transaction type can include "(partial)" in it. parser should be able to accomodate for it

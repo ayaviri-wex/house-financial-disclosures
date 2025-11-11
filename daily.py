@@ -1,3 +1,5 @@
+from parse import parse_report
+
 # 1) Establishes connection with the database
 # 2) Queries for report IDs that don't already exist in the report table
 # 3) Writes reports and transactions with the IDs found from the previous

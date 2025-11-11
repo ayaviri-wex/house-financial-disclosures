@@ -1,0 +1,3 @@
+- filing id is at the end of the first page, so this is likely consistent across documents
+- the owner column of the transactions table is present, and the current parser implementation will include it as part of the asset name. the same will likely be true of the id column should we see a report that has it filled out
+- below the filing status is a different section called "Subholding Of". this is abbreviated as "S O" in the text. It too will affect the name of the following asset

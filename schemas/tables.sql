@@ -1,6 +1,6 @@
 -- Represents a House Financial Disclosure report
-create table if not exists report (
-    -- TODO: Figure out what uniquely identifies a report and see how it can be casted into an integer
+create table if not exists reports (
+    -- The report's filing ID, which uniquely identifies it
     report_id integer primary key on conflict ignore,
     -- The full name of the House Representative to whom this report belongs
     representative_name text,
@@ -11,8 +11,8 @@ create table if not exists report (
 );
 
 -- Represents a transaction within a House Financial Disclosure report
-create table if not exists transaction (
-    -- TODO: Figure out what uniquely identifies a transaction and see how it can be casted into an integer
+create table if not exists transactions (
+    -- An MD5 hash of the report ID, asset ID, and the transaction date
     transaction_id integer primary key on conflict ignore,
     -- The ID of the report (record) this transaction belongs to
     report_id integer references report (report_id),
@@ -36,8 +36,8 @@ create table if not exists transaction (
     created_at text
 );
 
-create table if not exists asset (
-    -- TODO: Figure out what uniquely identifies an asset and see how it can be casted into an integer
+create table if not exists assets (
+    -- An MD5 hash of the asset name and type
     asset_id primary key on conflict ignore,
     -- The name of the asset
     name text,

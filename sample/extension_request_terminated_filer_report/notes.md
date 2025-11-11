@@ -1,0 +1,1 @@
+- extension request forms have types. this one called a terminated filer report because this representative is no longer in office. it might be worth being able to distinguish between extension requests and regular financial disclosures
