@@ -1,1 +1,2 @@
 - a transaction type can include "(partial)" in it. parser should be able to accomodate for it
+- asset tickers aren't required, and the asset pattern doesn't match that

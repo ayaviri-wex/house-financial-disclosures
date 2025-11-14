@@ -10,19 +10,81 @@ import sys
 import requests
 from html.parser import HTMLParser
 
-
 class LinkExtractor(HTMLParser):
-    """HTML parser to extract all <a> tags and their href attributes."""
+    """
+    HTML parser to extract <a> tags with 'PTR Original' filing type.
+    """
 
     def __init__(self):
         super().__init__()
         self.links = []
+        # State tracking variables
+        self.in_tr = False                  # True when inside a table row <tr>
+        self.in_link_cell = False           # True when inside the Name column cell (which contains the link)
+        self.in_filing_cell = False         # True when inside the Filing column cell
+        self.current_link = None            # Stores the potential link from the <a> tag
+        self.current_filing_type = None     # Stores the text data from the Filing column cell
 
     def handle_starttag(self, tag, attrs):
-        if tag == "a":
+        if tag == "tr":
+            # Start of a new row
+            self.in_tr = True
+            self.current_link = None
+            self.current_filing_type = None
+
+        elif tag == "td":
+            # Check if this is the 'Name' column (which contains the link)
+            attrs_dict = dict(attrs)
+            if self.in_tr and attrs_dict.get('data-label') == 'Name':
+                self.in_link_cell = True
+            # Check if this is the 'Filing' column
+            elif self.in_tr and attrs_dict.get('data-label') == 'Filing':
+                self.in_filing_cell = True
+
+        elif tag == "a" and self.in_link_cell:
+            # Capture the link when inside the link cell
             for attr, value in attrs:
                 if attr == "href":
-                    self.links.append(value)
+                    self.current_link = value
+                    break
+
+    def handle_endtag(self, tag):
+        if tag == "td":
+            # End of a cell - reset the cell flags
+            self.in_link_cell = False
+            self.in_filing_cell = False
+
+        elif tag == "tr" and self.in_tr:
+            # End of a row - perform the check
+            self.in_tr = False
+            # Check if we captured a link AND the filing type is exactly 'PTR Original'
+            if self.current_link and self.current_filing_type == "PTR Original":
+                self.links.append(self.current_link)
+            
+            # Reset the data variables for the next row (though start_tag does this, too)
+            self.current_link = None
+            self.current_filing_type = None
+    
+    def handle_data(self, data):
+        # We only care about data inside the Filing column cell
+        if self.in_filing_cell:
+            # Clean up the data (remove leading/trailing whitespace, etc.)
+            clean_data = data.strip()
+            if clean_data:
+                self.current_filing_type = clean_data
+
+# class LinkExtractor(HTMLParser):
+#     """HTML parser to extract all <a> tags and their href attributes."""
+# 
+#     def __init__(self):
+#         super().__init__()
+#         self.links = []
+# 
+#     def handle_starttag(self, tag, attrs):
+#         if tag == "a":
+#             for attr, value in attrs:
+#                 if attr == "href":
+#                     self.links.append(value)
 
 
 def get_verification_token():

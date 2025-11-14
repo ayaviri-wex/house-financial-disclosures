@@ -14,28 +14,52 @@ from pypdf import PdfReader
 #   \___\___/|_| |_|___/\__\__,_|_| |_|\__|___/
 #                                              
 
-REPORT_PATTERN = re.compile(r"""
-    # 
-""", re.VERBOSE | re.DOTALL)
-
-TRANSACTION_PATTERN = re.compile(r"""
+DATE_PATTERN = r"\d{1,2}/\d{1,2}/\d{4}"
+ASSET_PATTERN = r".*?\[.*?\]"
+MONETARY_AMOUNT_PATTERN = r"\$[\d,]*"
+SUBHOLDING_OF_PATTERN = r"S\sO:"
+DESCRIPTION_PATTERN = r"D:"
+COMMENT_PATTERN = r"C:"
+TRANSACTION_PATTERN = re.compile(fr"""
     # Asset group (eg. Amazon (AMZN) [ST])
-    \s*(.*?\[.*?\])
+    \s*(?P<asset>{ASSET_PATTERN})
 
     # Transaction type group
-    \s*([PS])
+    \s*(?P<type>
+    P
+    |
+    S\s*(?:\(partial\))? # Matches "S" or "S (partial)"
+    )
 
     # Transaction date group
-    \s*(\d{1,2}/\d{1,2}/\d{4})
+    \s*(?P<transaction_date>{DATE_PATTERN})
 
     # Notification date group
-    \s*(\d{1,2}/\d{1,2}/\d{4})
+    \s*(?P<notification_date>{DATE_PATTERN})
 
     # Amount range group
-    \s*(\$[\d]*[,]*[\d]*\s-\s\$[\d]*[,]*[\d]*)
+    \s*(?P<amount_range>{MONETARY_AMOUNT_PATTERN}\s-\s{MONETARY_AMOUNT_PATTERN})
 
-    # Filing status group
-    \s*(F\sS:\sNew)
+    # Filing status group (Required starting point of transaction footer)
+    \s*F\sS:\s(?P<filing_status>.*?)\s
+    (?=({SUBHOLDING_OF_PATTERN}|{DESCRIPTION_PATTERN}|{COMMENT_PATTERN}|\Z|{ASSET_PATTERN}))
+
+    # Subholding of group (Optional)
+    (?:\s*{SUBHOLDING_OF_PATTERN}\s*(?P<subholding_of>.*?)\s
+    (?=({DESCRIPTION_PATTERN}|{COMMENT_PATTERN}|\Z|{ASSET_PATTERN})))?
+
+    # Comment group (Optional)
+    (?:\s*{COMMENT_PATTERN}\s*(?P<comment>.*?)\s
+    (?=({DESCRIPTION_PATTERN}|\Z|{ASSET_PATTERN})))?
+
+    # Description group (Optional)
+    (?:\s*{DESCRIPTION_PATTERN}\s*(?P<description>.*?)\s
+    (?=({COMMENT_PATTERN}|\Z|{ASSET_PATTERN})))?
+
+    # Lookahead: Assert that the transaction is followed by the start of a new one
+    # or the end of the entire string, which prevents the final optional group from
+    # consuming the start of the next transaction asset
+    (?=\s*({ASSET_PATTERN}|\Z))
 """, re.VERBOSE | re.DOTALL)
 TABLE_HEADER_PATTERN = re.compile(
     r'ID\s+Owner\s+Asset\s+Transaction\s+Type\s+Date\s+Notification\s+Date\s+Amount\s+Cap\.\s+Gains\s+>\s+\$200\?',
@@ -46,6 +70,26 @@ TABLE_FOOTER_PATTERN = re.compile(
     re.DOTALL
 )
 
+# NOTE: The only reason the following two patterns aren't combined into one and
+# stored as a static variable of the Report class is because the order of these
+# 3 attributes isn't fixed. The filing ID could come after the signing date for
+# single page reports, and I don't want to make the pattern to unwieldy to 
+# accommodate for this
+FILING_ID_PATTERN = re.compile(
+    r'Filing ID #([\d]+)',
+    re.DOTALL
+)
+REP_NAME_AND_SIGNING_DATE_PATTERN = re.compile(fr"""
+    # Representative name group
+    Signed:\sHon\.\s(.+?)\s,
+
+    # Signing date group
+    \s({DATE_PATTERN})
+""", re.VERBOSE | re.DOTALL)
+
+# Signed: Hon\. (.+?) ,
+# # Signing date group
+# \s({DATE_PATTERN})
 
 #       _       _              _       __ _       _ _   _                 
 #    __| | __ _| |_ __ _    __| | ___ / _(_)_ __ (_) |_(_) ___  _ __  ___ 
@@ -64,23 +108,24 @@ class Asset:
     type: str
     ticker: Optional[str]
     PATTERN = re.compile("""
-        # Name group
-        (.*)\s
+        # Name group (required)
+        (?P<name>.*?)\s
 
-        # Ticker group
-        \((.*)\)\s
+        # Ticker group (optional)
+        (?:
+            \((?P<ticker>.*)\)\s
+        )?
 
-        # Type group
-        \[(.*)\]
+        # Type group (required)
+        \[(?P<type>.*?)\]
     """, re.VERBOSE | re.DOTALL)
 
     @staticmethod
     def from_group(g: str):
         m: Match = Asset.PATTERN.search(g)
-        match_groups_iterator = iter(m.groups())
-        name = next(match_groups_iterator)
-        ticker = next(match_groups_iterator)
-        type = next(match_groups_iterator)
+        name = m.group("name")
+        ticker = m.group("ticker")
+        type = m.group("type")
 
         return Asset(name, type, ticker)
 
@@ -98,6 +143,7 @@ class FilingStatus(Enum):
 class TransactionType(Enum):
     PURCHASE = 1
     SALE = 2
+    SALE_PARTIAL = 3
 
     @staticmethod
     def from_group(g: str):
@@ -105,6 +151,8 @@ class TransactionType(Enum):
             return TransactionType.PURCHASE
         elif g == "S":
             return TransactionType.SALE
+        elif g == "S (partial)":
+            return TransactionType.SALE_PARTIAL
         else:
             # TODO
             raise Exception()
@@ -147,35 +195,39 @@ class AmountRange:
 @dataclass
 class Transaction:
     asset: Asset
-    filing_status: FilingStatus
     type: TransactionType
     transaction_date: date
     notification_date: date
-    # The specific amount for a given transaction is not given in these 
-    # reports, only a range is provided
     amount: AmountRange
-    # Represents the raw text that was parsed to create this object
+    filing_status: FilingStatus
+    subholding_of: Optional[str]
+    description: Optional[str]
+    comment: Optional[str]
     raw_text: str
 
     @staticmethod
     def from_match(m: Match):
-        match_groups_iterator = iter(m.groups())
-
-        asset: Asset = Asset.from_group(next(match_groups_iterator))
-        type: TransactionType = TransactionType.from_group(next(match_groups_iterator))
-        transaction_date: date = Date.from_group(next(match_groups_iterator))
-        notification_date: date = Date.from_group(next(match_groups_iterator))
-        amount: AmountRange = AmountRange.from_group(next(match_groups_iterator))
-        filing_status = FilingStatus.from_group(next(match_groups_iterator))
+        asset = Asset.from_group(m.group("asset"))
+        type = TransactionType.from_group(m.group("type"))
+        transaction_date = Date.from_group(m.group("transaction_date"))
+        notification_date = Date.from_group(m.group("notification_date"))
+        amount = AmountRange.from_group(m.group("amount_range"))
+        filing_status = FilingStatus.from_group(m.group("filing_status"))
+        subholding_of = m.group("subholding_of")
+        description = m.group("description")
+        comment = m.group("comment")
         raw_text = m.group()
 
         return Transaction(
             asset,
-            filing_status,
             type,
             transaction_date,
             notification_date,
             amount,
+            filing_status,
+            subholding_of,
+            description,
+            comment,
             raw_text
         )
 
@@ -198,9 +250,23 @@ class Report:
 
     @staticmethod
     def from_cleansed_text(raw_text: str, transactions: list[Transaction]):
-        filing_id = 1
-        representative_name = "foo"
-        signed_date = date.today()
+        filing_id_match = FILING_ID_PATTERN.search(raw_text)
+
+        if not filing_id_match:
+            # TODO
+            raise Exception()
+
+        # NOTE: This group matches to digits only, so this conversion should work
+        filing_id = int(filing_id_match.group(1))
+        rep_name_and_signing_date_match = REP_NAME_AND_SIGNING_DATE_PATTERN.search(raw_text)
+
+        if not rep_name_and_signing_date_match:
+            # TODO
+            raise Exception()
+
+        match_groups_iterator = iter(rep_name_and_signing_date_match.groups())
+        representative_name = next(match_groups_iterator)
+        signed_date = Date.from_group(next(match_groups_iterator))
 
         return Report(
             filing_id=filing_id,
@@ -271,9 +337,17 @@ def cleanse_raw_text(raw_text: str) -> str:
 # 4) Finds the transaction matches using a regex pattern
 # 5) Constructs a transaction from each match
 # 6) Constructs a report from the raw text and list of transactions, returns report
-def parse_report(report_file_path: str) -> Report:
+def parse_report(report_file_path: str) -> Optional[Report]:
     cleansed_text: str = extract_cleansed_text(report_file_path)
+
+    if not cleansed_text:
+        return None
+
     transactions_block: str = extract_transactions_block(cleansed_text)
+
+    if not transactions_block:
+        return None
+
     transaction_matches: list[Match] = list(TRANSACTION_PATTERN.finditer(transactions_block))
     ts: list[Transaction] = [Transaction.from_match(m) for m in transaction_matches]
     # NOTE: I'm adding the Report object after I've created the script to parse 
@@ -308,7 +382,18 @@ def parse_arguments() -> Args:
 
 if __name__ == "__main__":
     a: Args = parse_arguments()
-    r: Report = parse_report(a.report_file_path)
+    print(a.report_file_path)
+    r: Optional[Report] = parse_report(a.report_file_path)
 
-    for t in r.transactions:
-        print(str(t) + "\n")
+    if not r:
+        print("no report found")
+    else:
+        print(f"""
+        filing_id: {r.filing_id}
+        representative_name: {r.representative_name}
+        signed_date: {r.signed_date}
+
+        """)
+
+        for t in r.transactions:
+            print(str(t) + "\n\n\n")
