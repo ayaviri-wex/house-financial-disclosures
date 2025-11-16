@@ -168,7 +168,16 @@ def search_disclosures(last_name=None, filing_year=None, state=None, district=No
         parser = LinkExtractor()
         parser.feed(response.text)
 
-        return parser.links
+        # NOTE: Seems like only relative links are produced.
+        # Make absolute here
+        return [
+            (
+                f"https://disclosures-clerk.house.gov/{l}" 
+                if l.startswith("public_disc/") 
+                else l 
+            )
+            for l in parser.links
+        ]
 
     except requests.exceptions.RequestException as e:
         print(f"Error making request: {e}", file=sys.stderr)

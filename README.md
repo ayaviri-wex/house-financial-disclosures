@@ -1,6 +1,6 @@
 # house-financial-disclosures
 
-Python script that creates a model of transactions from a single [House Financial Disclosure Report](https://disclosures-clerk.house.gov/FinancialDisclosure)
+Python ETL script that scrapes and extracts transactions from [House Financial Disclosure Reports](https://disclosures-clerk.house.gov/FinancialDisclosure)
 
 ## Setup
 
@@ -11,13 +11,27 @@ $ source <venv-name>/bin/activate
 $ pip install -r requirements.txt
 ```
 
-## Usage
+## Contents & Usage
 
-For now, the script just prints the in-memory representations of the parsed transactions. The goal is to run this on all reports for a given day, and then write the transactions to a SQLite database for warehousing purposes + further analysis
+- `daily.py`: The ETL script to be run on a given basis. It scrapes all reports for the current calendar year, extracts the transactions from them, and writes the new reports to a SQLite database
 
 ```
-$ # With venv activated
-$ python script.py sample/report.pdf
+$ python daily.py
+```
+
+- `parse.py`: Contains the function to extract transactions from a single report
+
+```
+$ python parse.py sample/new_transaction_type_report/report.pdf
+```
+
+- `models.py`: The meat of this project. Contains models for the data available in these reports. Each model contains the logic to parse itself from cleansed report text and write itself to the database
+- `schemas/tables.sql`: The schemas for the SQLite database tables. To reset the database:
+
+```
+$ rm report.db
+$ sqlite3 -init schemas/tables.sql
+$ sqlite> .exit
 ```
 
 ## To Do
@@ -30,9 +44,9 @@ $ python script.py sample/report.pdf
     - [ ] Add not null constraints to necessary fields and a constraint to ensure that the amount_min attribute is strictly less than the amount_max attribute
 - [x] Perform schema creation migration
 - [ ] Create script to be called by daily running cron job
-    - [ ] Have it download all reports across all representatives for the current year
-    - [ ] Parse all reports, filter out reports that have already been written to the database
-    - [ ] Write new report transactions to database
+    - [x] Have it download all reports across all representatives for the current year
+    - [x] Parse all reports, filter out reports that have already been written to the database
+    - [x] Write new report transactions to database
     - [ ] SOMEWHERE in here, consider writing the reports themselves to some sort of object storage for the sake of posterity
 - [ ] Improve parser robustness, sample size of 1 off of which to build regex patterns was obviously too small
     - [x] Filing ID appears to be at the end of the first page. It's likely best to search for it in its own pass through of the document and not as a capturing group in a larger regex
@@ -47,3 +61,4 @@ $ python script.py sample/report.pdf
     - [x] Some transaction types are marked as "S (partial)". This might break the parser since the group after the transaction type doesn't expect a parenthesis
     - [x] Physical scans don't produce text. Deal with this case
 - [x] Restrict search to periodic transaction reports
+- [ ] Consider an ORM. I just don't like the absence of a database layer with the current implementation
